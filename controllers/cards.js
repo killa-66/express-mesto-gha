@@ -1,5 +1,5 @@
 const Card = require('../models/card');
-const mongoose = require('mongoose');
+const mongoose = require('../models/card');
 
 module.exports.getCards = (req, res) => {
   Card.find({})

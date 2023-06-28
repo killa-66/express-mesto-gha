@@ -1,10 +1,10 @@
 const User = require('../models/user');
-const mongoose = require('mongoose');
+const mongoose = require('../models/user');
 
 module.exports.getUsers = (req, res) => {
   User.find({})
     .then((users) => res.send({ data: users }))
-    .catch((err) => res.status(500).send({ message: 'Произошла ошибка' }));
+    .catch((err) => res.status(500).send({ message: 'Произошла ошибка', error: err }));
 };
 
 module.exports.getUser = (req, res) => {
