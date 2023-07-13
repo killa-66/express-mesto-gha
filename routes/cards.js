@@ -14,12 +14,15 @@ router.post(
     body: Joi.object().keys({
       link: Joi.string()
         .required()
-        .uri({
-          scheme: ['http', 'https'],
-          allowQuerySquareBrackets: true,
-        })
+        .pattern(new RegExp('^(https?:\\/\\/)?'
+          + '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.?)+[a-z]{2,}|'
+          + '((\\d{1,3}\\.){3}\\d{1,3}))'
+          + '(\\:\\d+)?'
+          + '(\\/[-a-z\\d%_.~+]*)*'
+          + '(\\?[;&amp;a-z\\d%_.~+=-]*)?'
+          + '(\\#[-a-z\\d_]*)?$', 'i'))
         .messages({
-          'string.uri': 'Некорректный формат ссылки на аватар',
+          'string.pattern.base': 'Некорректный формат ссылки на аватар',
         }),
       name: Joi.string()
         .min(2)

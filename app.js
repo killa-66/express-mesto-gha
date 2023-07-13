@@ -17,8 +17,6 @@ mongoose
   .then(() => {
     app.use(bodyParser.json());
     app.use(cookieParser());
-    app.use('/users', router);
-    app.use('/cards', auth, router);
 
     app.post(
       '/signin',
@@ -53,12 +51,15 @@ mongoose
             'string.max': 'Максимальная длина имени - 30 символов',
           }),
           avatar: Joi.string()
-            .uri({
-              scheme: ['http', 'https'],
-              allowQuerySquareBrackets: true,
-            })
+            .pattern(new RegExp('^(https?:\\/\\/)?'
+              + '((([a-z\\d]([a-z\\d-]*[a-z\\d])*)\\.?)+[a-z]{2,}|'
+              + '((\\d{1,3}\\.){3}\\d{1,3}))'
+              + '(\\:\\d+)?'
+              + '(\\/[-a-z\\d%_.~+]*)*'
+              + '(\\?[;&amp;a-z\\d%_.~+=-]*)?'
+              + '(\\#[-a-z\\d_]*)?$', 'i'))
             .messages({
-              'string.uri': 'Некорректный формат ссылки на аватар',
+              'string.pattern.base': 'Некорректный формат ссылки на аватар',
             }),
           about: Joi.string().min(2).max(30).messages({
             'string.min': 'Минимальная длина имени - 2 символа',
@@ -68,6 +69,7 @@ mongoose
       }),
       createUser,
     );
+    app.use('/', auth, router);
     app.use('*', (req, res, next) => {
       next(new NotFoundError('Маршрут не найден'));
     });

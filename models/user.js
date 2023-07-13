@@ -60,12 +60,6 @@ userSchema.statics.findUserByCredentials = function (email, password) {
           return user;
         });
       })
-      // eslint-disable-next-line
-      .catch(() => {
-        return Promise.reject(
-          new UnauthorizedError('Неправильная почта или пароль'),
-        );
-      })
   );
 };
 
