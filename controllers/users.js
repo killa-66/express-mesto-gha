@@ -1,68 +1,159 @@
-const http = require('http');
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const { constants } = require('http2');
 const User = require('../models/user');
-const mongoose = require('../models/user');
+const { BadRequestError } = require('../errors/BadRequest');
+const { InternalServerError } = require('../errors/InternalServer');
+const { NotFoundError } = require('../errors/NotFound');
+const { ConflictError } = require('../errors/ConflictError');
 
-module.exports.getUsers = (req, res) => {
-  User.find({})
-    .then((users) => res.send({ data: users }))
-    .catch((err) => res.status(http.STATUS_CODES.InternalServerError).send({ message: 'Произошла ошибка', error: err }));
+const createUser = (req, res, next) => {
+  // eslint-disable-next-line
+  const { name, about, avatar, email, password } = req.body;
+  bcrypt
+    .hash(password, 10)
+    .then((hash) => {
+      User.create({
+        name,
+        about,
+        avatar,
+        email,
+        password: hash,
+      })
+        .then((data) => {
+          res.status(constants.HTTP_STATUS_OK).send({
+            email: data.email,
+            _id: data._id,
+            name: data.name,
+            about: data.about,
+            avatar: data.avatar,
+          });
+        })
+        .catch((error) => {
+          if (error instanceof mongoose.Error.ValidationError) {
+            return next(new BadRequestError('Невалидные данные'));
+          }
+          if (error.code === 11000) {
+            return next(new ConflictError('Данная почта уже используется'));
+          }
+          return next(new InternalServerError('Ошибка сервера'));
+        });
+    })
+    .catch(() => next(new InternalServerError('Ошибка сервера')));
 };
-
-module.exports.getUser = (req, res) => {
-  User.findById(req.params.userId)
+const getUsers = (req, res, next) => {
+  User.find({})
+    .then((users) => {
+      res.status(constants.HTTP_STATUS_OK).send(users);
+    })
+    .catch(() => next(new InternalServerError('Ошибка сервера')));
+};
+const getUser = (req, res, next) => {
+  const { userId } = req.params;
+  User.findById(userId)
+    // eslint-disable-next-line consistent-return
     .then((user) => {
       if (!user) {
-        return res.status(http.STATUS_CODES.NotFound).send({ message: 'Пользователь не найден.' });
+        return next(new NotFoundError('Пользователь не найден'));
       }
-      return res.send({ data: user });
+      res.status(constants.HTTP_STATUS_OK).send(user);
     })
-    .catch((err) => {
-      if (err instanceof mongoose.Error.CastError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Передан некорректный id пользователя.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
+    .catch((error) => {
+      if (error instanceof mongoose.Error.CastError) {
+        return next(new BadRequestError('Невалидные данные'));
       }
+      return next(new InternalServerError('Ошибка сервера'));
     });
 };
 
-module.exports.createUser = (req, res) => {
-  const { name, about, avatar } = req.body;
-
-  User.create({ name, about, avatar })
-    .then((user) => res.send({ data: user }))
-    .catch((err) => {
-      if (err instanceof mongoose.Error.ValidationError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Переданы некорректные данные при создании пользователя.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
-      }
-    });
-};
-
-module.exports.updateProfile = (req, res) => {
+const updateUser = (req, res, next) => {
   const { name, about } = req.body;
 
-  User.findByIdAndUpdate(req.user._id, { name, about }, { new: true, runValidators: true })
-    .then((user) => res.send({ data: user }))
-    .catch((err) => {
-      if (err instanceof mongoose.Error.ValidationError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Переданы некорректные данные при обновлении профиля.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
+  User.findByIdAndUpdate(
+    req.user._id,
+    {
+      name,
+      about,
+    },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+    .then((user) => res.status(constants.HTTP_STATUS_OK).send(user))
+    .catch((error) => {
+      if (error instanceof mongoose.Error.ValidationError) {
+        return next(new BadRequestError('Невалидные данные'));
       }
+      return next(new InternalServerError('Ошибка сервера'));
     });
 };
 
-module.exports.updateAvatar = (req, res) => {
+const updateAvatar = (req, res, next) => {
   const { avatar } = req.body;
 
-  User.findByIdAndUpdate(req.user._id, { avatar }, { new: true, runValidators: true })
-    .then((user) => res.send({ data: user }))
-    .catch((err) => {
-      if (err instanceof mongoose.Error.ValidationError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Переданы некорректные данные при обновлении аватара.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
+  User.findByIdAndUpdate(
+    req.user._id,
+    { avatar },
+    {
+      new: true,
+      runValidators: true,
+    },
+  )
+    .then((user) => res.status(constants.HTTP_STATUS_OK).send(user))
+    .catch((error) => {
+      if (error instanceof mongoose.Error.ValidationError) {
+        return next(new BadRequestError('Невалидные данные'));
       }
+      return next(new InternalServerError('Ошибка сервера'));
     });
+};
+
+const login = (req, res, next) => {
+  const { email, password } = req.body;
+
+  return User.findUserByCredentials(email, password)
+    .then((user) => {
+      const token = jwt.sign(
+        { _id: user._id },
+        '886a087688c0b68e82c2bb9c52e6b3f6',
+        {
+          expiresIn: '7d',
+        },
+      );
+      return res
+        .cookie('token', token, {
+          maxAge: 3600000 * 24 * 7,
+          httpOnly: true,
+        })
+        .send({
+          token,
+          email: user.email,
+          _id: user._id,
+          name: user.name,
+          about: user.about,
+          avatar: user.avatar,
+        });
+    })
+    .catch((err) => {
+      next(err);
+    });
+};
+const getCurrentUser = (req, res, next) => {
+  User.findById(req.user._id)
+    .then((user) => {
+      res.status(constants.HTTP_STATUS_OK).send(user);
+    })
+    .catch(() => next(new InternalServerError('Ошибка сервера')));
+};
+
+module.exports = {
+  createUser,
+  getUsers,
+  getUser,
+  updateUser,
+  updateAvatar,
+  login,
+  getCurrentUser,
 };

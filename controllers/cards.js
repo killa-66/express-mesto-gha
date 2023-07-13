@@ -1,75 +1,67 @@
-const http = require('http');
+const mongoose = require('mongoose');
 const Card = require('../models/card');
-const mongoose = require('../models/card');
+const { InternalServerError } = require('../errors/InternalServer');
+const { BadRequestError } = require('../errors/BadRequest');
+const { NotFoundError } = require('../errors/NotFound');
 
-module.exports.getCards = (req, res) => {
+module.exports.getCards = (req, res, next) => {
   Card.find({})
     .then((cards) => res.send({ data: cards }))
-    .catch((err) => res.status(http.STATUS_CODES.InternalServerError)
-      .send({ message: err.message }));
+    .catch(() => next(new InternalServerError('Ошибка инициализации сервера')));
 };
 
-module.exports.createCard = (req, res) => {
+module.exports.createCard = (req, res, next) => {
   const { name, link } = req.body;
 
   Card.create({ name, link, owner: req.user._id })
     .then((card) => res.send({ data: card }))
-    .catch((err) => {
-      if (err instanceof mongoose.Error.ValidationError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Переданы некорректные данные при создании карточки.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
+    .catch((error) => {
+      if (error instanceof mongoose.Error.ValidationError) {
+        return next(new BadRequestError('Невалидные данные'));
       }
+      return next(new InternalServerError('Ошибка инициализации сервера'));
     });
 };
 
-module.exports.deleteCard = (req, res) => {
-  Card.findByIdAndRemove(req.params.cardId)
+module.exports.deleteCard = (req, res, next) => {
+  Card.findById(req.params.cardId)
     .then((card) => {
       if (!card) {
-        return res.status(http.STATUS_CODES.NotFound).send({ message: 'Карточка с указанным _id не найдена.' });
+        return next(new NotFoundError('Карточка не найдена'));
       }
-      return res.send({ data: card });
+      if (card.owner.toString() !== req.user._id) {
+        const err = new Error('Нет прав для удаления этой карточки.');
+        err.statusCode = 403;
+        throw err;
+      }
+      return Card.deleteOne(card).then(() => res.send({ data: card }));
     })
-    .catch((err) => {
-      if (err instanceof mongoose.Error.CastError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Передан некорректный id карточки.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
-      }
-    });
+    .catch(next);
 };
 
-module.exports.likeCard = (req, res) => {
+module.exports.likeCard = (req, res, next) => {
   Card.findByIdAndUpdate(req.params.cardId, { $addToSet: { likes: req.user._id } }, { new: true })
     .then((card) => {
       if (!card) {
-        return res.status(http.STATUS_CODES.NotFound).send({ message: 'Карточка с указанным _id не найдена.' });
+        return next(new NotFoundError('Карточка не найдена'));
       }
       return res.send({ data: card });
     })
-    .catch((err) => {
-      if (err instanceof mongoose.Error.CastError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Передан некорректный id карточки.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
-      }
-    });
+    .catch(() => next(new InternalServerError('Ошибка инициализации сервера')));
 };
 
-module.exports.dislikeCard = (req, res) => {
+module.exports.dislikeCard = (req, res, next) => {
   Card.findByIdAndUpdate(req.params.cardId, { $pull: { likes: req.user._id } }, { new: true })
     .then((card) => {
       if (!card) {
-        return res.status(http.STATUS_CODES.NotFound).send({ message: 'Карточка с указанным _id не найдена.' });
+        return next(new NotFoundError('Карточка не найдена'));
       }
       return res.send({ data: card });
     })
-    .catch((err) => {
-      if (err instanceof mongoose.Error.CastError) {
-        res.status(http.STATUS_CODES.BadRequest).send({ message: 'Передан некорректный id карточки.' });
-      } else {
-        res.status(http.STATUS_CODES.InternalServerError).send({ message: err.message });
+    .catch((error) => {
+      if (error instanceof mongoose.Error.CastError) {
+        return next(new BadRequestError('Невалидные данные'));
       }
+      return next(new InternalServerError('Ошибка инициализации сервера'));
     });
 };

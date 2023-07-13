@@ -1,31 +1,87 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const cookieParser = require('cookie-parser');
+const bodyParser = require('body-parser');
+const { celebrate, Joi, errors } = require('celebrate');
 const router = require('./routes');
+const { login, createUser } = require('./controllers/users');
+const { auth } = require('./middlewares/auth');
+const { errorMiddleware } = require('./middlewares/errorMiddleware');
+const { NotFoundError } = require('./errors/NotFound');
 
 const app = express();
-
 app.use(express.json());
-app.use((req, res, next) => {
-  req.user = {
-    _id: '649aec572e6b51d77977794d',
-  };
 
-  next();
-});
-app.use(router);
-
-const mongoUrl = 'mongodb://localhost:27017/mestodb';
-
-mongoose.connect(mongoUrl, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose
+  .connect('mongodb://127.0.0.1:27017/mestodb')
   .then(() => {
-    console.log('Connected to MongoDB');
+    app.use(bodyParser.json());
+    app.use(cookieParser());
+    app.use('/users', router);
+    app.use('/cards', auth, router);
+
+    app.post(
+      '/signin',
+      celebrate({
+        body: Joi.object().keys({
+          email: Joi.string().email().required().messages({
+            'string.email': 'Неправильный формат почты',
+            'any.required': 'Поле "email" обязательно для заполнения',
+          }),
+          password: Joi.string().min(8).required().messages({
+            'string.min': 'Минимальная длина пароля - 8 символов',
+            'any.required': 'Поле "password" обязательно для заполнения',
+          }),
+        }),
+      }),
+      login,
+    );
+    app.post(
+      '/signup',
+      celebrate({
+        body: Joi.object().keys({
+          email: Joi.string().email().required().messages({
+            'string.email': 'Неправильный формат почты',
+            'any.required': 'Поле обязательно для заполнения',
+          }),
+          password: Joi.string().min(8).required().messages({
+            'string.min': 'Минимальная длина пароля - 8 символов',
+            'any.required': 'Поле обязательно для заполнения',
+          }),
+          name: Joi.string().min(2).max(30).messages({
+            'string.min': 'Минимальная длина имени - 2 символа',
+            'string.max': 'Максимальная длина имени - 30 символов',
+          }),
+          avatar: Joi.string()
+            .uri({
+              scheme: ['http', 'https'],
+              allowQuerySquareBrackets: true,
+            })
+            .messages({
+              'string.uri': 'Некорректный формат ссылки на аватар',
+            }),
+          about: Joi.string().min(2).max(30).messages({
+            'string.min': 'Минимальная длина имени - 2 символа',
+            'string.max': 'Максимальная длина имени - 30 символов',
+          }),
+        }),
+      }),
+      createUser,
+    );
+    app.use('*', (req, res, next) => {
+      next(new NotFoundError('Маршрут не найден'));
+    });
+    app.use(
+      errors({
+        statusCode: 400,
+      }),
+    );
+    app.use(errorMiddleware);
+
     app.listen(3000, () => {
-      console.log('Server started on port 3000');
+      console.error('Server started on port 3000');
     });
   })
-  .catch((err) => {
-    console.error('Error connecting to MongoDB:', err);
+  .catch((error) => {
+    console.error('Ошибка подключения к MongoDB:', error);
   });
