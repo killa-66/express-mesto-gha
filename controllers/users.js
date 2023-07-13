@@ -123,10 +123,6 @@ const login = (req, res, next) => {
         },
       );
       return res
-        .cookie('token', token, {
-          maxAge: 3600000 * 24 * 7,
-          httpOnly: true,
-        })
         .send({
           token,
           email: user.email,
